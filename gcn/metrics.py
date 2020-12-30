@@ -6,7 +6,7 @@ def masked_softmax_cross_entropy(preds, labels, mask):
     # origin
     loss = tf.nn.softmax_cross_entropy_with_logits_v2(logits=preds, labels=labels)
     mask = tf.cast(mask, dtype=tf.float32)
-    mask /= tf.reduce_mean(mask)
+    mask /= tf.reduce_mean(mask+1e-7)
     loss *= mask
     return tf.reduce_mean(loss)
 

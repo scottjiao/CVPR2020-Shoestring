@@ -5,6 +5,18 @@ import numpy as np
 from copy import copy
 from gcn.utils import recursive_map
 
+
+def label_to_onehot_vec(label,dimension):
+    #label is tensor
+    batch_size = tf.size(label)
+    labels = tf.cast(tf.expand_dims(label, 1),tf.int32)
+    indices = tf.expand_dims(tf.range(0, batch_size, 1), 1)
+    concated = tf.concat([indices, labels],1)
+    onehot_labels = tf.sparse_to_dense(concated, tf.stack([batch_size, dimension]), 1.0, 0.0)
+    return onehot_labels
+
+
+
 def cosine_similarity(inputs, output_dim, placeholders, k_ratio):
 
     # get the number of unlabeled data needed for adjusting centroid
@@ -157,13 +169,14 @@ def l1_distance(inputs, output_dim, placeholders, k_ratio):
 
 
 class IGCN(object):
-    def __init__(self, model_config, placeholders, is_gcn, k_ratio, weight, method, input_dim):
+    def __init__(self, model_config, placeholders, is_gcn, k_ratio, weight, method,threshold,class_num, input_dim):
         self.model_config = model_config
         self.name = model_config['name']
         if not self.name:
             self.name = self.__class__.__name__.lower()
         self.logging = True if self.model_config['logdir'] else False
-
+        self.threshold=threshold
+        self.class_num=class_num
         self.vars = {}
         self.layers = []
         self.activations = []
@@ -286,7 +299,95 @@ class IGCN(object):
         
         self.cross_entropy_loss += masked_softmax_cross_entropy(self.outputs, self.placeholders['labels'], self.placeholders['labels_mask'])
         if self.is_gcn:
-            self.cross_entropy_loss += self.outputs_weight* masked_softmax_cross_entropy(self.outs, self.placeholders['labels'], self.placeholders['labels_mask'])
+
+            if "ds" in self.method:
+                self.outs=self.outputs
+                self.softmaxOutput=tf.nn.softmax(self.outputs)
+
+                self.predictedLabel=tf.argmax(self.outputs,1)
+                
+                self.onehot_labels=label_to_onehot_vec(self.predictedLabel,dimension=self.class_num)
+                self.onehot_labels=tf.stop_gradient(self.onehot_labels)
+                                
+                
+                self.classSum=tf.reduce_sum(self.onehot_labels,axis=0)+tf.ones([1,self.class_num])
+                
+                
+                attentionFunction='threshMax'
+                if attentionFunction=='threshMax':
+                    """
+                    ----------------------------------------------------------------------
+                    Dynamic Self-training Module
+                    ----------------------------------------------------------------------
+                    """
+                    self.attention=\
+                        tf.stop_gradient(
+                            tf.multiply(
+                                tf.reduce_max(
+                                    tf.divide(
+                                        tf.multiply(
+                                            (
+                                                tf.ones_like(self.softmaxOutput))
+                                            ,
+                                            tf.cast(
+                                                tf.greater(
+                                                    self.softmaxOutput
+                                                    ,
+                                                    self.threshold)
+                                                ,
+                                                tf.float32))
+                                        ,
+                                        self.classSum)
+                                    ,
+                                    axis=1)
+                                ,
+                                (
+                                    tf.ones_like(
+                                        self.placeholders['labels_mask']
+                                        ,
+                                        dtype=tf.float32)
+                                    -
+                                    tf.cast(
+                                        self.placeholders['labels_mask']
+                                        ,
+                                        tf.float32))))
+                                        
+                    """else:
+                        self.attention=\
+                        tf.stop_gradient(
+                            tf.multiply(
+                                tf.reduce_max(
+                                    tf.divide(
+                                        tf.nn.relu(
+                                            (                                   
+                                                self.softmaxOutput
+                                                -
+                                                self.placeholders['thresh'])
+                                            )
+                                        ,
+                                        self.classSum)
+                                    ,
+                                    axis=1)
+                                ,
+                                (
+                                    tf.ones_like(
+                                        self.placeholders['labels_mask']
+                                        ,
+                                        dtype=tf.float32)
+                                    -
+                                    tf.cast(
+                                        self.placeholders['labels_mask']
+                                        ,
+                                        tf.float32))))"""
+
+
+                #self.relaxedLoss=self.loss+tf.reduce_sum(tf.multiply(self.attention, tf.nn.softmax_cross_entropy_with_logits(logits=self.outputs,labels=self.onehot_labels)  ))
+                #self.cross_entropy_loss +=tf.reduce_sum(tf.multiply(self.attention, tf.nn.softmax_cross_entropy_with_logits(logits=self.outputs,labels=self.onehot_labels)  ))
+                self.cross_entropy_loss +=masked_softmax_cross_entropy(self.outs, self.onehot_labels, self.attention)
+
+
+            #metric loss
+            #self.cross_entropy_loss += self.outputs_weight* masked_softmax_cross_entropy(self.outs, self.placeholders['labels'], self.placeholders['labels_mask'])
     def _laplacian_regularization(self, graph_signals):
         self.lapla_reg = tf.sparse_tensor_dense_matmul(self.placeholders['laplacian'], graph_signals)
         self.lapla_reg = tf.matmul(tf.transpose(graph_signals), self.lapla_reg)

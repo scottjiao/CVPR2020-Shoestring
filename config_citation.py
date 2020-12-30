@@ -73,7 +73,7 @@ default = {
         'train'             : True,
     }
 
-repeat = 1
+repeat = 100
 
 one_label_set ={
     # repeating times

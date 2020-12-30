@@ -17,7 +17,8 @@ from gcn.models import IGCN
 from arg_parser import parameter_parser
 from copy import deepcopy
 from texttable import Texttable
-
+import os
+os.environ['CUDA_VISIBLE_DEVICES']="1"
 # from gcn import metrics
 
 def best_printer(log):
@@ -26,7 +27,7 @@ def best_printer(log):
     t.add_rows([per for per in log])
     print(t.draw())
 
-def train(model_config, sess, repeat_state, adj, features, y_train, y_val, y_test, train_mask, val_mask, test_mask, k_ratio, weight, method, is_gcn):
+def train(model_config, sess, repeat_state, adj, features, y_train, y_val, y_test, train_mask, val_mask, test_mask, k_ratio, weight, method,threshold, is_gcn):
     # Print model_name
     very_begining = time.time()
     print('',
@@ -79,6 +80,7 @@ def train(model_config, sess, repeat_state, adj, features, y_train, y_val, y_tes
         y_train = y_train.astype(np.int32)
 
     input_dim = features.shape[1]
+    class_num=y_train.shape[1]
     if sparse.issparse(features):
         train_features = sparse_to_tuple(train_features)
         val_features = sparse_to_tuple(val_features)
@@ -107,7 +109,7 @@ def train(model_config, sess, repeat_state, adj, features, y_train, y_val, y_tes
                                                                name='features')
 
     # Create model
-    model = IGCN(model_config, placeholders, is_gcn, k_ratio, weight, method, input_dim=input_dim)
+    model = IGCN(model_config, placeholders, is_gcn, k_ratio, weight, method, threshold,class_num ,input_dim=input_dim)
 
     # Random initialize
     sess.run(tf.global_variables_initializer())
@@ -255,6 +257,9 @@ if __name__ == '__main__':
     pset = args.pset
     dataset = args.dataset
     method = args.method
+    threshold=0.6
+    if " " in method[0]:
+        method=method[0].split(" ")
 
     result = [['Dataset', 'Train Size', 'Accuracy', 'Std', 'Time/Step(ms)', 'Smoothing Time(s)', 'Total Time(s)', 'Model', 'K Ratio', 'Weight', 'Method']]
     for me in method:
@@ -265,6 +270,7 @@ if __name__ == '__main__':
                 #configuration['default']['dataset'] = da
                 pprint.PrettyPrinter(indent=4).pprint(configuration)
                 configuration['model_list'] = list(map(set_default_attr, configuration['model_list']))
+                #raise Exception
                 for model_config in configuration['model_list']:
                     preprocess_model_config(model_config)
                 
@@ -286,6 +292,7 @@ if __name__ == '__main__':
                             total_time = []
                             for r in range(configuration['repeating']):
                                 # Set random seed
+                                print(f"The repetition {r} of task {str(model_config['name'])+str( me)} begins!")
                                 seed = model_config['random_seed']
                                 np.random.seed(seed)
                                 model_config['random_seed'] = np.random.random_integers(1073741824)
@@ -306,7 +313,7 @@ if __name__ == '__main__':
 
                                         test_acc, test_acc_of_class, t, smoothing_time, total_train_time = train(
                                             model_config, sess, r, adj, features, y_train, y_val, y_test, train_mask, val_mask, 
-                                            test_mask, ratio, la, me, is_gcn=True)
+                                            test_mask, ratio, la, me,threshold ,is_gcn=True)
                                         acc.append(test_acc)
                                         acc_class.append(test_acc_of_class)
                                         time_per_step.append(t)

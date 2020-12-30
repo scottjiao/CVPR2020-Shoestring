@@ -76,8 +76,8 @@ def split_dataset(labels, train_size, test_size, validation_size, validate=True,
                     idx_train.append(i)
                     count[j] += 1
                     break
-            else:
-                idx_test.append(i)
+                else:
+                    idx_test.append(i)
 
         idx_test = np.array(idx_test, dtype=idx.dtype)
         if validate:
@@ -234,6 +234,7 @@ def load_data(dataset_str, train_size, validation_size, model_config, shuffle=Tr
     # split the data set
     idx_train, idx_val, idx_test = split_dataset(labels, train_size, model_config['test_size'], validation_size,
                                                  validate=model_config['validate'], shuffle=shuffle)
+    print(f"The idx of train is {idx_train}")
 
     if model_config['verbose']:
         print('labels of each class : ', np.sum(labels[idx_train], axis=0))

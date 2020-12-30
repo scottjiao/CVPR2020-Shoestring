@@ -33,11 +33,16 @@ def parameter_parser():
                         nargs="+",
                         type=str,
                         help = "Method to calculate the distance. Options are l1, l2, cos. Default is cos.")
+    parser.add_argument("--threshold",
+                        nargs="+",
+                        type=float,
+                        help = "dsgcn")
 
     parser.set_defaults(k = [0])
     parser.set_defaults(lam = [0.01])
     parser.set_defaults(pset = ['config_citation.one_label_set'])
     parser.set_defaults(dataset = ['cora'])
     parser.set_defaults(method = ['cos'])
+    parser.set_defaults(threshold = [0.6])
     
     return parser.parse_args()
